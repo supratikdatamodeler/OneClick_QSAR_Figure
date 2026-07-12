@@ -64,38 +64,3 @@ Each figure supports editable axis labels, title, font size, colors, and simple 
 make training blue, test red, x axis Experimental pLC50, y axis Predicted pLC50, font 18
 ```
 
-## Run
-
-Open `index.html` in a browser. No server or package install is required for this first version.
-
-For reliable exports, use the local server instead of opening the file directly:
-
-```powershell
-& 'C:\Users\skar\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' export_server.js
-```
-
-Then open:
-
-```text
-http://127.0.0.1:8000/index.html
-```
-
-When running through the local server, CSV/SVG/PNG exports can be saved directly into:
-
-```text
-exports/
-```
-
-## Validation
-
-The sample workflow can be checked with:
-
-```powershell
-& 'C:\Users\skar\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' smoke-test.js 'C:\Users\skar\OneDrive - kean.edu\Documents\Supratik Kar\NSF-Maria\Work-1\QSAR data\QSAR Model\Final model'
-```
-
-The smoke test verifies descriptor detection, row counts for the generated CSVs, and Williams plot leverage calculation.
-
-## Next Streamlit Step
-
-When moving to Streamlit/GitHub, the calculation functions should be ported from `app.js` into a Python module, then the figure controls can be implemented with Streamlit widgets and Matplotlib/Plotly exports.
