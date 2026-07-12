@@ -2,16 +2,18 @@
 
 This workspace contains a first local dashboard for turning six QSAR model output files into figure-ready CSV files and publication-style plots.
 
+Access: https://oneclickqsarfigure.streamlit.app/
+
 ## Inputs
 
 Upload these six files in the dashboard:
 
-1. `Fungus_model_SummaryResults.txt`
-2. `Fungus_model_YRandomizationResults.csv`
-3. `Fungus_model_Train_StdAD.csv`
-4. `Fungus_model_Test_StdAD.csv`
-5. `Fungus_model_TRAINCalcLog.csv`
-6. `Fungus_model_TESTCalcLog.csv`
+1. `model_SummaryResults.txt`
+2. `model_YRandomizationResults.csv`
+3. `model_Train_StdAD.csv`
+4. `model_Test_StdAD.csv`
+5. `model_TRAINCalcLog.csv`
+6. `model_TESTCalcLog.csv`
 
 The browser cannot auto-read a local path for security reasons, so the user selects the files manually.
 
