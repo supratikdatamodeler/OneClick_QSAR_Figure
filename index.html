@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QSAR Figure Dashboard</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="qsar-app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div>
+        <h1>QSAR Figure Dashboard</h1>
+        <p>Upload six model files, generate derived tables, then create editable publication figures.</p>
+      </div>
+    </div>
+
+    <section class="panel">
+      <h2>Input Files</h2>
+      <label class="file-row">
+        <span>Summary results (.txt)</span>
+        <input id="summaryFile" type="file" accept=".txt,text/plain">
+      </label>
+      <label class="file-row">
+        <span>Y-randomization (.csv)</span>
+        <input id="yrandFile" type="file" accept=".csv,text/csv">
+      </label>
+      <label class="file-row">
+        <span>Train StdAD (.csv)</span>
+        <input id="trainAdFile" type="file" accept=".csv,text/csv">
+      </label>
+      <label class="file-row">
+        <span>Test StdAD (.csv)</span>
+        <input id="testAdFile" type="file" accept=".csv,text/csv">
+      </label>
+      <label class="file-row">
+        <span>Train CalcLog (.csv)</span>
+        <input id="trainLogFile" type="file" accept=".csv,text/csv">
+      </label>
+      <label class="file-row">
+        <span>Test CalcLog (.csv)</span>
+        <input id="testLogFile" type="file" accept=".csv,text/csv">
+      </label>
+      <button id="generateBtn" type="button">Generate CSVs and figures</button>
+      <p id="status" class="status">Waiting for files.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Figure Controls</h2>
+      <label>
+        Figure
+        <select id="figureSelect">
+          <option value="scatter">Observed vs predicted</option>
+          <option value="williams">Williams plot</option>
+          <option value="randomization">Y-randomization</option>
+          <option value="shap">SHAP-style interpretation</option>
+          <option value="correlation">Correlation heatmap</option>
+          <option value="loading">Factor loading plot</option>
+          <option value="vip">VIP plot</option>
+          <option value="chemical">Chemical space PCA</option>
+          <option value="residuals">Residual distribution</option>
+          <option value="contribution">Descriptor contribution table</option>
+          <option value="outliers">AD outlier table</option>
+        </select>
+      </label>
+      <label>
+        Chemical-space color
+        <select id="chemicalColorMode">
+          <option value="class">Train/Test set</option>
+          <option value="ad">AD status</option>
+        </select>
+      </label>
+      <label>
+        X-axis label
+        <input id="xLabel" type="text" placeholder="Auto">
+      </label>
+      <label>
+        Y-axis label
+        <input id="yLabel" type="text" placeholder="Auto">
+      </label>
+      <label>
+        Figure title
+        <input id="plotTitle" type="text" placeholder="Optional">
+      </label>
+      <label>
+        Font size
+        <input id="fontSize" type="number" min="9" max="36" value="16">
+      </label>
+      <div class="color-grid">
+        <label>
+          Training
+          <input id="trainColor" type="color" value="#4169e1">
+        </label>
+        <label>
+          Test
+          <input id="testColor" type="color" value="#ff1f1f">
+        </label>
+        <label>
+          Line
+          <input id="lineColor" type="color" value="#111111">
+        </label>
+        <label>
+          Accent
+          <input id="accentColor" type="color" value="#d62728">
+        </label>
+      </div>
+      <label>
+        Prompt changes
+        <textarea id="promptBox" rows="4" placeholder="Example: make training blue, test red, x axis Experimental pLC50, y axis Predicted pLC50, font 18"></textarea>
+      </label>
+      <div class="button-row">
+        <button id="applySettingsBtn" type="button">Apply settings</button>
+        <button id="applyPromptBtn" type="button">Apply prompt</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Prediction</h2>
+      <label class="file-row">
+        <span>External descriptor space (.csv)</span>
+        <input id="predictionFile" type="file" accept=".csv,text/csv">
+      </label>
+      <label>
+        Top/least compounds
+        <input id="predictionRankCount" type="number" min="1" max="50" value="5">
+      </label>
+      <button id="runPredictionBtn" type="button">Predict compounds</button>
+      <p id="predictionStatus" class="status">Generate the model first, then upload descriptor space.</p>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="metrics" id="metrics"></section>
+
+    <section class="figure-shell">
+      <div class="figure-toolbar">
+        <div>
+          <h2 id="activeFigureTitle">Observed vs predicted</h2>
+          <p id="activeFigureHint">Upload files and generate outputs to preview figures.</p>
+        </div>
+        <div class="button-row">
+          <button id="downloadSvgBtn" type="button" disabled>Download SVG</button>
+          <button id="downloadPngBtn" type="button" disabled>Download PNG</button>
+        </div>
+      </div>
+      <div id="exportLinks" class="export-links" aria-live="polite"></div>
+      <div id="figureArea" class="figure-area">
+        <div class="empty-state">Generated figures will appear here.</div>
+      </div>
+      <div id="figureInfo" class="figure-info">
+        <div>
+          <h3>Interpretation</h3>
+          <p>Generate figures to view interpretation notes.</p>
+        </div>
+        <div>
+          <h3>Publication Caption</h3>
+          <p>Generate figures to view a suggested caption.</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="predictionSection" class="figure-shell">
+      <div class="figure-toolbar">
+        <div>
+          <h2>Prediction</h2>
+          <p>External compound prediction, applicability-domain check, and Insubria plot.</p>
+        </div>
+        <div class="button-row">
+          <button id="downloadPredictionCsvBtn" type="button" disabled>Download Predictions CSV</button>
+          <button id="downloadPredictionSvgBtn" type="button" disabled>Download Insubria SVG</button>
+          <button id="downloadPredictionPngBtn" type="button" disabled>Download Insubria PNG</button>
+        </div>
+      </div>
+      <div id="predictionExportLinks" class="export-links" aria-live="polite"></div>
+      <div id="predictionPlotArea" class="figure-area prediction-area">
+        <div class="empty-state">Prediction results will appear here after uploading an external descriptor CSV.</div>
+      </div>
+      <div id="predictionRankPlotArea" class="figure-area prediction-area compact-figure-area">
+        <div class="empty-state">Top and least predicted compound bar plots will appear here.</div>
+      </div>
+      <div class="prediction-summary-grid">
+        <div class="panel">
+          <h2 id="topPredictionsTitle">Top 5 Predicted</h2>
+          <div id="topPredictions" class="prediction-table muted">No predictions yet.</div>
+        </div>
+        <div class="panel">
+          <h2 id="leastPredictionsTitle">Least 5 Predicted</h2>
+          <div id="leastPredictions" class="prediction-table muted">No predictions yet.</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="output-grid">
+      <div class="panel">
+        <h2>Generated CSV Files</h2>
+        <div id="csvDownloads" class="download-list">
+          <p class="muted">No generated CSVs yet.</p>
+        </div>
+      </div>
+    </section>
+    <footer class="creator-footer">
+      <p><strong><em>Supratik Kar, Ph.D.</em></strong></p>
+      <p><em>Associate Professor</em></p>
+      <p><em>Chemometrics &amp; Molecular Modeling Laboratory</em></p>
+      <p><em>Department of Chemistry</em></p>
+      <p><em>Kean University, New Jersey, USA</em></p>
+      <p>Contact: <a href="mailto:supratik.kar@kean.edu">supratik.kar@kean.edu</a></p>
+    </footer>
+  </main>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
