@@ -56,11 +56,6 @@ After generating the model workflow, upload an external descriptor-space CSV in 
 - persistent Save/Open/Copy links for prediction CSV, Insubria SVG, and top/least SVG exports
 - downloadable Insubria SVG/PNG exports
 
-The dashboard footer includes creator/contact information for the future GitHub and Streamlit release.
-
-Each figure supports editable axis labels, title, font size, colors, and simple prompt-style commands such as:
-
-```text
 make training blue, test red, x axis Experimental pLC50, y axis Predicted pLC50, font 18
 ```
 
