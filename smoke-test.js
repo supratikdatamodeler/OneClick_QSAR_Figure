@@ -65,6 +65,11 @@ const renderedFigures = ["scatter", "williams", "randomization", "shap", "correl
   };
   return [name, renderers[name]().length];
 });
+const targetDetectionChecks = {
+  pEC50: detectTargetColumn(["ID", "Feature_1", "Feature_2", "pEC50 (mOLAR)", "OUTLIER"]),
+  pIC50: detectTargetColumn(["ID", "D1", "D2", "pIC50", "AD Info."]),
+  oddBeforeOutlier: detectTargetColumn(["ID", "D1", "D2", "My Custom Endpoint", "OUTLIER"])
+};
 const predictionTable = typedRows(parseCSV(load("Fungus_model_Test_StdAD.csv")));
 const predictionInv = modelLeverageInverse();
 state.predictions = predictionTable.rows.map((row, index) => {
@@ -103,6 +108,7 @@ console.log(JSON.stringify({
   hStar: Math.round(will.hStar * 1000000) / 1000000,
   firstWilliams: will.finalRows[0],
   renderedFigures,
+  targetDetectionChecks,
   predictionRows: state.predictions.length,
   predictionSvgLength: state.predictionSvg.length,
   predictionRankSvgLength: state.predictionRankSvg.length,

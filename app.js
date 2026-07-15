@@ -238,9 +238,25 @@ function toNumberIfPossible(value) {
 }
 
 function detectTargetColumn(columns) {
-  const target = columns.find(col => /plc|activity|response|yobs/i.test(col));
-  if (!target) throw new Error("Could not identify the response column in the StdAD file.");
-  return target;
+  const namedTarget = columns.find(col => {
+    const normalized = String(col).toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return /^(plc50|pec50|pic50|pki|pkd|pmic|pchembl|pka)/i.test(normalized)
+      || /(activity|response|endpoint|toxicity|yobs|yobserved|observed)/i.test(normalized);
+  });
+  if (namedTarget) return namedTarget;
+
+  const infoIndex = columns.findIndex(col => /outlier|ad\s*info|info/i.test(String(col)));
+  if (infoIndex > 0) {
+    const fallback = columns[infoIndex - 1];
+    if (!/^id$/i.test(String(fallback))) return fallback;
+  }
+
+  if (columns.length >= 2) {
+    const fallback = columns[columns.length - 1];
+    if (!/^id$/i.test(String(fallback)) && !/outlier|ad\s*info|info/i.test(String(fallback))) return fallback;
+  }
+
+  throw new Error("Could not identify the response column in the StdAD file.");
 }
 
 function detectDescriptors(columns, target) {

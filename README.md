@@ -2,20 +2,20 @@
 
 This workspace contains a first local dashboard for turning six QSAR model output files into figure-ready CSV files and publication-style plots.
 
-Access: https://oneclickqsarfigure.streamlit.app/
-
 ## Inputs
 
 Upload these six files in the dashboard:
 
-1. `model_SummaryResults.txt`
-2. `model_YRandomizationResults.csv`
-3. `model_Train_StdAD.csv`
-4. `model_Test_StdAD.csv`
-5. `model_TRAINCalcLog.csv`
-6. `model_TESTCalcLog.csv`
+1. `Fungus_model_SummaryResults.txt`
+2. `Fungus_model_YRandomizationResults.csv`
+3. `Fungus_model_Train_StdAD.csv`
+4. `Fungus_model_Test_StdAD.csv`
+5. `Fungus_model_TRAINCalcLog.csv`
+6. `Fungus_model_TESTCalcLog.csv`
 
 The browser cannot auto-read a local path for security reasons, so the user selects the files manually.
+
+The response column can use common QSAR names such as `pLC50`, `pEC50`, `pIC50`, `pKi`, `pKd`, `pMIC`, or `pChEMBL`. If a response has an unusual name, place it immediately before the `OUTLIER`, `AD Info`, or other info column; the app will use that preceding column as the response. Descriptor count is not fixed; the workflow uses all numeric descriptor columns except ID, response, AD, class, info, and outlier columns.
 
 ## Generated CSV files
 
@@ -58,6 +58,46 @@ After generating the model workflow, upload an external descriptor-space CSV in 
 - persistent Save/Open/Copy links for prediction CSV, Insubria SVG, and top/least SVG exports
 - downloadable Insubria SVG/PNG exports
 
+The dashboard footer includes creator/contact information for the future GitHub and Streamlit release.
+
+Each figure supports editable axis labels, title, font size, colors, and simple prompt-style commands such as:
+
+```text
 make training blue, test red, x axis Experimental pLC50, y axis Predicted pLC50, font 18
 ```
 
+## Run
+
+Open `index.html` in a browser. No server or package install is required for this first version.
+
+For reliable exports, use the local server instead of opening the file directly:
+
+```powershell
+& 'C:\Users\skar\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' export_server.js
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8000/index.html
+```
+
+When running through the local server, CSV/SVG/PNG exports can be saved directly into:
+
+```text
+exports/
+```
+
+## Validation
+
+The sample workflow can be checked with:
+
+```powershell
+& 'C:\Users\skar\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe' smoke-test.js 'C:\Users\skar\OneDrive - kean.edu\Documents\Supratik Kar\NSF-Maria\Work-1\QSAR data\QSAR Model\Final model'
+```
+
+The smoke test verifies descriptor detection, row counts for the generated CSVs, and Williams plot leverage calculation.
+
+## Next Streamlit Step
+
+When moving to Streamlit/GitHub, the calculation functions should be ported from `app.js` into a Python module, then the figure controls can be implemented with Streamlit widgets and Matplotlib/Plotly exports.
