@@ -269,22 +269,60 @@ function detectDescriptors(columns, target) {
 }
 
 function parseIntercept(text, target) {
-  const lines = String(text || "").split(/\r?\n/);
-  const equationLine = lines.find(line => line.includes("=") && (!target || line.includes(target))) || lines.find(line => line.includes("=")) || "";
-  const afterEquals = equationLine.split("=").slice(1).join("=");
-  const match = afterEquals.match(/([+-]?\d+(?:\.\d+)?(?:[Ee][+-]?\d+)?)/);
-  return match ? Number(match[1]) : 0;
+  const equationText = extractEquationText(text, target);
+  const afterEquals = equationText.split("=").slice(1).join("=");
+  const match = afterEquals.match(coefficientNumberPattern());
+  return match ? parseSignedNumber(match[0]) : 0;
 }
 
 function parseCoefficients(text, descriptors) {
   const result = {};
+  const equationText = extractEquationText(text, "");
   descriptors.forEach(desc => {
     const escaped = escapeRegExp(desc);
-    const regex = new RegExp(`([+-]?\\d+(?:\\.\\d+)?(?:[Ee][+-]?\\d+)?)\\s*\\(\\+/-[^)]*\\)\\s*${escaped}`, "i");
-    const match = text.match(regex);
-    result[desc] = match ? Number(match[1]) : 1;
+    const number = coefficientNumberPattern().source;
+    const beforeDescriptor = new RegExp(`(${number})\\s*(?:\\(\\s*\\+/-[^)]*\\)\\s*)?(?:\\*\\s*)?${escaped}(?![\\w])`, "i");
+    const afterDescriptor = new RegExp(`${escaped}(?![\\w])\\s*(?:\\*\\s*)?(${number})`, "i");
+    const implicitUnit = new RegExp(`([+-])\\s*(?:\\*\\s*)?${escaped}(?![\\w])`, "i");
+    const match = equationText.match(beforeDescriptor) || equationText.match(afterDescriptor) || equationText.match(implicitUnit);
+    result[desc] = match ? parseSignedNumber(match[1]) : 0;
   });
   return result;
+}
+
+function normalizeMathText(value) {
+  return String(value || "")
+    .replace(/[−–—]/g, "-")
+    .replace(/[×]/g, "*");
+}
+
+function coefficientNumberPattern() {
+  return /[+-]?\s*(?:\d+(?:\.\d*)?|\.\d+)(?:[Ee][+-]?\d+)?/;
+}
+
+function parseSignedNumber(value) {
+  if (value === "+") return 1;
+  if (value === "-") return -1;
+  const number = Number(String(value || "").replace(/\s+/g, ""));
+  return Number.isFinite(number) ? number : 0;
+}
+
+function extractEquationText(text, target) {
+  const normalized = normalizeMathText(text);
+  const lines = normalized.split(/\r?\n/);
+  const targetText = String(target || "").trim().toLowerCase();
+  let start = lines.findIndex(line => line.includes("=") && (!targetText || line.toLowerCase().includes(targetText)));
+  if (start < 0) start = lines.findIndex(line => line.includes("="));
+  if (start < 0) return normalized.replace(/\s+/g, " ").trim();
+
+  const equationLines = [];
+  for (let i = start; i < lines.length; i++) {
+    const line = lines[i];
+    if (i > start && /^\s*$/.test(line)) break;
+    if (i > start && /^\s*\*{3,}/.test(line)) break;
+    equationLines.push(line);
+  }
+  return equationLines.join(" ").replace(/\s+/g, " ").trim();
 }
 
 function escapeRegExp(value) {
@@ -685,16 +723,7 @@ function renderLoading() {
 }
 
 function renderVip() {
-  const rows = state.generated["SHAP.csv"];
-  const yValues = rows.map(row => Number(row[state.target]));
-  const ySd = std(yValues) || 1;
-  const raw = state.descriptors.map(desc => {
-    const values = rows.map(row => Number(row[desc]));
-    const score = Math.abs((state.coefficients[desc] || 1) * (std(values) || 1) / ySd);
-    return { desc, raw: score };
-  });
-  const denom = Math.sqrt(sum(raw.map(item => item.raw * item.raw)) / Math.max(1, raw.length)) || 1;
-  const vip = raw.map(item => ({ desc: item.desc, score: item.raw / denom })).sort((a, b) => b.score - a.score);
+  const vip = buildVipRows().map(row => ({ desc: row.descriptor, score: row.vip }));
   const cfg = chartBase(1050, 680);
   cfg.margin.left = 110;
   cfg.margin.bottom = 250;
@@ -710,7 +739,10 @@ function renderVip() {
     const barW = band * 0.72;
     const xx = x0 + i * band + (band - barW) / 2;
     const yy = y(item.score);
-    svg += `<rect x="${xx}" y="${yy}" width="${barW}" height="${cfg.height - cfg.margin.bottom - yy}" fill="${state.settings.global.trainColor}"/>`;
+    const rawHeight = cfg.height - cfg.margin.bottom - yy;
+    const barHeight = item.score > 0 ? Math.max(2, rawHeight) : 0;
+    const barY = cfg.height - cfg.margin.bottom - barHeight;
+    svg += `<rect x="${xx}" y="${barY}" width="${barW}" height="${barHeight}" fill="${state.settings.global.trainColor}"/>`;
     svg += wrappedCenteredText(x0 + i * band + band / 2, cfg.height - cfg.margin.bottom + 32, item.desc, cfg.fs * 0.78, Math.max(8, Math.floor(band / 8)), 4);
   });
   svg += plotTitle(cfg, getSetting("title"));
@@ -1300,13 +1332,13 @@ function chemicalPointColor(point, mode) {
   return point.className === "Training set" ? state.settings.global.trainColor : state.settings.global.testColor;
 }
 
-function buildDescriptorContributionRows() {
+function buildVipRows() {
   const rows = state.generated["SHAP.csv"] || [];
   const yValues = rows.map(row => Number(row[state.target]));
   const ySd = std(yValues) || 1;
   const raw = state.descriptors.map(desc => {
     const values = rows.map(row => Number(row[desc]));
-    const coefficient = state.coefficients[desc] || 0;
+    const coefficient = Number(state.coefficients[desc] || 0);
     return {
       descriptor: desc,
       coefficient,
@@ -1315,14 +1347,20 @@ function buildDescriptorContributionRows() {
     };
   });
   const denom = Math.sqrt(sum(raw.map(item => item.raw * item.raw)) / Math.max(1, raw.length)) || 1;
-  return raw.map(item => {
+  return raw
+    .map(item => ({ ...item, vip: item.raw / denom }))
+    .sort((a, b) => b.vip - a.vip);
+}
+
+function buildDescriptorContributionRows() {
+  return buildVipRows().map(item => {
     const sign = item.coefficient >= 0 ? "Positive" : "Negative";
     const color = item.coefficient >= 0 ? "#176b3a" : "#9a1c1c";
     return {
       descriptor: item.descriptor,
       sign,
       color,
-      vip: item.raw / denom,
+      vip: item.vip,
       corr: item.corr,
       interpretation: item.coefficient >= 0
         ? "Higher descriptor values increase predicted activity in the MLR equation."

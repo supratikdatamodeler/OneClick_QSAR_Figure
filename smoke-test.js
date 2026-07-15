@@ -70,6 +70,12 @@ const targetDetectionChecks = {
   pIC50: detectTargetColumn(["ID", "D1", "D2", "pIC50", "AD Info."]),
   oddBeforeOutlier: detectTargetColumn(["ID", "D1", "D2", "My Custom Endpoint", "OUTLIER"])
 };
+const vipRows = buildVipRows();
+const contributionRows = buildDescriptorContributionRows();
+const vipContributionMatch = vipRows.every((row, index) =>
+  row.descriptor === contributionRows[index].descriptor &&
+  Math.abs(row.vip - contributionRows[index].vip) < 1e-12
+);
 const predictionTable = typedRows(parseCSV(load("Fungus_model_Test_StdAD.csv")));
 const predictionInv = modelLeverageInverse();
 state.predictions = predictionTable.rows.map((row, index) => {
@@ -100,6 +106,8 @@ state.predictionCsv = toCSV(state.predictions.map(row => {
 console.log(JSON.stringify({
   target: state.target,
   descriptors: state.descriptors,
+  parsedCoefficients: state.coefficients,
+  vipRows: vipRows.map(row => ({ descriptor: row.descriptor, vip: Math.round(row.vip * 1000000) / 1000000 })),
   scatterRows: scatter.rows.length,
   randomizationRows: rand.rows.length,
   shapRows: shap.rows.length,
@@ -109,6 +117,7 @@ console.log(JSON.stringify({
   firstWilliams: will.finalRows[0],
   renderedFigures,
   targetDetectionChecks,
+  vipContributionMatch,
   predictionRows: state.predictions.length,
   predictionSvgLength: state.predictionSvg.length,
   predictionRankSvgLength: state.predictionRankSvg.length,
