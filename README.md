@@ -2,6 +2,8 @@
 
 This workspace contains a first local dashboard for turning six QSAR model output files into figure-ready CSV files and publication-style plots.
 
+Link to access: https://oneclickqsarfigure.streamlit.app/
+
 ## Inputs
 
 Upload these six files in the dashboard:
