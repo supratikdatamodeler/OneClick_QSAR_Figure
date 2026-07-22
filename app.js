@@ -633,12 +633,7 @@ function renderRandomization() {
 
 function renderShap() {
   const shapRows = state.generated["SHAP.csv"];
-  const features = state.descriptors.map(desc => {
-    const values = shapRows.map(row => Number(row[desc]));
-    const mean = average(values);
-    const contrib = values.map(value => state.coefficients[desc] * (value - mean));
-    return { desc, values, contrib, meanAbs: average(contrib.map(Math.abs)) };
-  }).sort((a, b) => b.meanAbs - a.meanAbs);
+  const features = buildLinearShapFeatures(shapRows);
   const all = features.flatMap(f => f.contrib);
   const cfg = chartBase(1200, Math.max(620, 135 + features.length * 85));
   cfg.margin.left = 250;
@@ -1247,8 +1242,8 @@ function figureNarrative(fig) {
       caption: "Y-randomization plot comparing the original QSAR model with response-scrambled models using R2 and Q2 metrics."
     },
     shap: {
-      interpretation: "This interpretation plot approximates descriptor-level contribution for the linear MLR equation. Wider spread indicates stronger influence; point color represents the descriptor value.",
-      caption: `Descriptor contribution plot for the MLR QSAR model, showing feature-value-dependent effects on predicted ${target}.`
+      interpretation: "This SHAP-style beeswarm uses a fitted linear regression model and the full training set as the background reference. Wider spread indicates stronger influence; point color represents the descriptor value.",
+      caption: `SHAP-style descriptor contribution plot for the fitted linear QSAR model, showing feature-value-dependent effects on predicted ${target}.`
     },
     correlation: {
       interpretation: "The heatmap summarizes pairwise descriptor-response correlations. Strong inter-descriptor correlations indicate possible redundancy, while descriptor-response correlations help explain activity trends.",
@@ -1259,8 +1254,8 @@ function figureNarrative(fig) {
       caption: `Two-component supervised loading plot for selected QSAR descriptors and ${target}.`
     },
     vip: {
-      interpretation: `The VIP plot ranks descriptors by standardized model influence. In this model, ${topDescriptor} is the strongest contributor by the current VIP approximation.`,
-      caption: "Variable importance projection (VIP) ranking for selected QSAR descriptors."
+      interpretation: `The VIP plot ranks descriptors using a two-component PLSRegression-style VIP calculation. In this model, ${topDescriptor} is the strongest contributor by VIP score.`,
+      caption: "Variable importance for the projection (VIP) ranking from the selected QSAR descriptors."
     },
     chemical: {
       interpretation: "The chemical space PCA plot shows whether training and test compounds occupy similar descriptor space. Test compounds far from the training cluster or outside AD status may be less reliable predictions.",
@@ -1332,23 +1327,64 @@ function chemicalPointColor(point, mode) {
   return point.className === "Training set" ? state.settings.global.trainColor : state.settings.global.testColor;
 }
 
+function buildLinearShapFeatures(rows) {
+  const model = fitLinearModelFromRows(rows);
+  const backgroundRows = rows;
+  const backgroundMeans = state.descriptors.map(desc => average(backgroundRows.map(row => Number(row[desc]))));
+  return state.descriptors.map((desc, index) => {
+    const values = rows.map(row => Number(row[desc]));
+    const coefficient = model.coefficients[index] ?? Number(state.coefficients[desc] || 0);
+    const contrib = values.map(value => coefficient * (value - backgroundMeans[index]));
+    return { desc, values, contrib, meanAbs: average(contrib.map(Math.abs)) };
+  }).sort((a, b) => b.meanAbs - a.meanAbs);
+}
+
+function fitLinearModelFromRows(rows) {
+  const x = rows.map(row => [1, ...state.descriptors.map(desc => Number(row[desc]))]);
+  const y = rows.map(row => [Number(row[state.target])]);
+  if (!x.length || !state.descriptors.length) return { intercept: 0, coefficients: [] };
+  try {
+    const beta = multiply(inverse(multiply(transpose(x), x)), multiply(transpose(x), y)).map(row => row[0]);
+    return {
+      intercept: Number.isFinite(beta[0]) ? beta[0] : state.intercept,
+      coefficients: state.descriptors.map((desc, index) => Number.isFinite(beta[index + 1]) ? beta[index + 1] : Number(state.coefficients[desc] || 0))
+    };
+  } catch (error) {
+    return {
+      intercept: state.intercept,
+      coefficients: state.descriptors.map(desc => Number(state.coefficients[desc] || 0))
+    };
+  }
+}
+
+function calculatePlsVipScores(rows) {
+  const xRaw = rows.map(row => state.descriptors.map(desc => Number(row[desc])));
+  const yRaw = rows.map(row => Number(row[state.target]));
+  const componentCount = Math.max(1, Math.min(2, state.descriptors.length, Math.max(1, rows.length - 1)));
+  const pls = fitPls1(xRaw, yRaw, componentCount);
+  const total = sum(pls.sumSq);
+  if (!total) return state.descriptors.map(() => 0);
+  return state.descriptors.map((_, featureIndex) => {
+    const weighted = sum(pls.sumSq.map((ss, componentIndex) => ss * Math.pow(pls.weights[featureIndex]?.[componentIndex] || 0, 2)));
+    return Math.sqrt(state.descriptors.length * weighted / total);
+  });
+}
+
 function buildVipRows() {
   const rows = state.generated["SHAP.csv"] || [];
   const yValues = rows.map(row => Number(row[state.target]));
-  const ySd = std(yValues) || 1;
-  const raw = state.descriptors.map(desc => {
-    const values = rows.map(row => Number(row[desc]));
-    const coefficient = Number(state.coefficients[desc] || 0);
-    return {
-      descriptor: desc,
-      coefficient,
-      raw: Math.abs(coefficient * (std(values) || 1) / ySd),
-      corr: correlation(values, yValues)
-    };
-  });
-  const denom = Math.sqrt(sum(raw.map(item => item.raw * item.raw)) / Math.max(1, raw.length)) || 1;
-  return raw
-    .map(item => ({ ...item, vip: item.raw / denom }))
+  const linearModel = fitLinearModelFromRows(rows);
+  const vipScores = calculatePlsVipScores(rows);
+  return state.descriptors
+    .map((desc, index) => {
+      const values = rows.map(row => Number(row[desc]));
+      return {
+        descriptor: desc,
+        coefficient: linearModel.coefficients[index] ?? Number(state.coefficients[desc] || 0),
+        vip: vipScores[index] || 0,
+        corr: correlation(values, yValues)
+      };
+    })
     .sort((a, b) => b.vip - a.vip);
 }
 
@@ -1896,6 +1932,39 @@ function buildPlsLoadingPoints(rows) {
     point.y *= flipY;
   });
   return points;
+}
+
+function fitPls1(xRaw, yRaw, componentCount) {
+  const x = standardizeColumns(xRaw);
+  const yMean = average(yRaw);
+  const yStd = std(yRaw) || 1;
+  let xh = x.map(row => [...row]);
+  let yh = yRaw.map(value => (value - yMean) / yStd);
+  const featureCount = xRaw[0]?.length || 0;
+  const weights = Array.from({ length: featureCount }, () => []);
+  const scores = [];
+  const qLoadings = [];
+  const sumSq = [];
+
+  for (let component = 0; component < componentCount; component += 1) {
+    let w = Array.from({ length: featureCount }, (_, col) => sum(xh.map((row, i) => row[col] * yh[i])));
+    const wNorm = Math.sqrt(sum(w.map(value => value * value))) || 1;
+    w = w.map(value => value / wNorm);
+    const t = xh.map(row => sum(row.map((value, col) => value * w[col])));
+    const denom = sum(t.map(value => value * value)) || 1;
+    const q = sum(t.map((value, i) => value * yh[i])) / denom;
+    const pLoad = Array.from({ length: featureCount }, (_, col) => sum(xh.map((row, i) => row[col] * t[i])) / denom);
+
+    w.forEach((value, featureIndex) => weights[featureIndex].push(value));
+    scores.push(t);
+    qLoadings.push(q);
+    sumSq.push(sum(t.map(value => value * value)) * q * q);
+
+    xh = xh.map((row, i) => row.map((value, col) => value - t[i] * pLoad[col]));
+    yh = yh.map((value, i) => value - t[i] * q);
+  }
+
+  return { weights, scores, qLoadings, sumSq };
 }
 
 function leverage(row, inv) {
